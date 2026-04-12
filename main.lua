@@ -45,12 +45,20 @@ local trackedPlayers = {}
 local function removeESP(player)
     local data = trackedPlayers[player]
     if not data then return end
-    for _, conn in ipairs(data.connections) do
-        conn:Disconnect()
-    end
+    
+    -- Clean up UI and Highlights
     if data.highlight then data.highlight:Destroy() end
     if data.billboard then data.billboard:Destroy() end
-    trackedPlayers[player] = nil
+    
+    for _, conn in ipairs(data.connections) do
+        if conn._isRender then 
+            conn:Disconnect() 
+        end
+    end
+    
+    -- Reset references
+    data.highlight = nil
+    data.billboard = nil
 end
 
 local function applyESP(player, char)
@@ -148,13 +156,19 @@ local function addPlayer(player)
 
     trackedPlayers[player] = { connections = {}, highlight = nil, billboard = nil }
 
-    if player.Character and player.Character.Parent then
+    if player.Character then
         task.spawn(applyESP, player, player.Character)
     end
 
     local charConn = player.CharacterAdded:Connect(function(char)
-        task.wait(1)
-        task.spawn(applyESP, player, char)
+        removeESP(player) 
+        trackedPlayers[player] = { connections = {}, highlight = nil, billboard = nil }
+        table.insert(trackedPlayers[player].connections, charConn) 
+        
+        task.wait(0.5) 
+        if char.Parent then
+            task.spawn(applyESP, player, char)
+        end
     end)
     table.insert(trackedPlayers[player].connections, charConn)
 end
