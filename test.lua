@@ -19,7 +19,7 @@ local Config = {
 
     Aimbot_Enabled = true,
     Aimbot_Key = Enum.KeyCode.X,
-    Aimbot_Smoothness = 0.1,
+    Aimbot_Smoothness = 1,
     Aimbot_FOV = 500,
     Aimbot_TargetPart = "Head",
     Aimbot_TeamCheck = true,
