@@ -159,6 +159,10 @@ local function addPlayer(player)
     table.insert(trackedPlayers[player].connections, charConn)
 end
 
+for _, player in ipairs(Players:GetPlayers()) do
+    task.spawn(addPlayer, player)
+end
+
 Players.PlayerAdded:Connect(addPlayer)
 Players.PlayerRemoving:Connect(removeESP)
 
