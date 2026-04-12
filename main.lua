@@ -46,87 +46,62 @@ local function isSameTeam(player)
         and getTeam(player) == getTeam(LocalPlayer)
 end
 
-local function cleanupESP(player)
+-- ============================================================
+-- ESP USING HIGHLIGHT
+-- ============================================================
+local ESPFolder = Instance.new("Folder")
+ESPFolder.Name = "ESPFolder"
+ESPFolder.Parent = LocalPlayer.PlayerGui
+
+local trackedPlayers = {}
+
+local function removeESP(player)
+    if trackedPlayers[player] then
+        for _, conn in ipairs(trackedPlayers[player].connections) do
+            conn:Disconnect()
+        end
+        if trackedPlayers[player].highlight then
+            trackedPlayers[player].highlight:Destroy()
+        end
+        if trackedPlayers[player].billboard then
+            trackedPlayers[player].billboard:Destroy()
+        end
+        trackedPlayers[player] = nil
+    end
+end
+
+local function applyESP(player, char)
     local data = trackedPlayers[player]
     if not data then return end
-    for _, conn in ipairs(data.connections) do
-        conn:Disconnect()
-    end
-    if data.billboard then data.billboard:Destroy() end
+
+    -- Remove old highlight if any
     if data.highlight then data.highlight:Destroy() end
-    trackedPlayers[player] = nil
-end
 
-local function setupCharacterESP(player, char)
-    local data = trackedPlayers[player]
-    if not data then return end
+    local highlight = Instance.new("Highlight")
+    highlight.FillColor = Color3.fromRGB(255, 50, 50)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
+    highlight.Adornee = char
+    highlight.Parent = char
+    data.highlight = highlight
 
-    data.billboard.Adornee = nil
-    data.highlight.Adornee = nil
-
-    local root = char:WaitForChild("HumanoidRootPart", 10)
-    local humanoid = char:WaitForChild("Humanoid", 10)
-    if not root or not humanoid then return end
-
-    -- Disconnect old render connections
-    for i = #data.connections, 1, -1 do
-        if data.connections[i]._isRender then
-            data.connections[i]:Disconnect()
-            table.remove(data.connections, i)
-        end
-    end
-
-    local renderConn = RunService.RenderStepped:Connect(function()
-        if not char.Parent or not root.Parent then
-            data.billboard.Adornee = nil
-            data.highlight.Adornee = nil
-            return
-        end
-
-        local myChar = LocalPlayer.Character
-        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        if not myRoot then return end
-
-        local dist = (root.Position - myRoot.Position).Magnitude
-        local alive = humanoid.Health > 0
-        local visible = Config.ESP_Enabled and dist <= Config.ESP_MaxDistance and alive
-
-        data.billboard.Enabled = visible
-        data.billboard.Adornee = visible and root or nil
-        data.highlight.Adornee = visible and char or nil
-
-        local hp = math.floor(humanoid.Health)
-        local maxHp = math.floor(math.max(humanoid.MaxHealth, 1))
-        data.healthLabel.Text = hp .. " / " .. maxHp
-        local ratio = hp / maxHp
-        data.healthLabel.TextColor3 = Color3.fromRGB(
-            math.floor((1 - ratio) * 255),
-            math.floor(ratio * 255),
-            50
-        )
-    end)
-    renderConn._isRender = true
-    table.insert(data.connections, renderConn)
-end
-
-local function addPlayer(player)
-    if player == LocalPlayer then return end
-    if trackedPlayers[player] then return end
+    -- Billboard for name + health
+    if data.billboard then data.billboard:Destroy() end
 
     local billboard = Instance.new("BillboardGui")
-    billboard.Name = "ESP_" .. player.Name
     billboard.AlwaysOnTop = true
-    billboard.Size = UDim2.new(0, 120, 0, 60)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.Enabled = false
-    billboard.Parent = ESPFolder
+    billboard.Size = UDim2.new(0, 120, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3.5, 0)
+    billboard.Parent = char:WaitForChild("HumanoidRootPart", 10)
+    data.billboard = billboard
 
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
     nameLabel.Position = UDim2.new(0, 0, 0, 0)
     nameLabel.BackgroundTransparency = 1
     nameLabel.Text = player.Name
-    nameLabel.TextColor3 = Config.ESP_NameColor
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     nameLabel.TextStrokeTransparency = 0
     nameLabel.TextScaled = true
     nameLabel.Font = Enum.Font.GothamBold
@@ -141,54 +116,64 @@ local function addPlayer(player)
     healthLabel.Font = Enum.Font.Gotham
     healthLabel.Parent = billboard
 
-    local highlight = Instance.new("SelectionBox")
-    highlight.Color3 = Config.ESP_BoxColor
-    highlight.LineThickness = 0.05
-    highlight.SurfaceTransparency = 0.9
-    highlight.SurfaceColor3 = Config.ESP_BoxColor
-    highlight.Parent = ESPFolder
+    local humanoid = char:WaitForChild("Humanoid", 10)
+    if not humanoid then return end
 
-    local connections = {}
+    -- Update health label
+    local renderConn = RunService.RenderStepped:Connect(function()
+        if not char.Parent or not Config.ESP_Enabled then
+            highlight.Enabled = false
+            billboard.Enabled = false
+            return
+        end
 
-    trackedPlayers[player] = {
-        billboard = billboard,
-        highlight = highlight,
-        nameLabel = nameLabel,
-        healthLabel = healthLabel,
-        connections = connections,
-    }
+        local myChar = LocalPlayer.Character
+        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not myRoot or not root then return end
 
-    -- Hook existing character immediately
-    if player.Character and player.Character.Parent then
-        task.spawn(setupCharacterESP, player, player.Character)
+        local dist = (root.Position - myRoot.Position).Magnitude
+        local alive = humanoid.Health > 0
+        local visible = dist <= Config.ESP_MaxDistance and alive
+
+        highlight.Enabled = visible
+        billboard.Enabled = visible
+
+        local hp = math.floor(humanoid.Health)
+        local maxHp = math.max(math.floor(humanoid.MaxHealth), 1)
+        healthLabel.Text = hp .. " / " .. maxHp
+        local ratio = hp / maxHp
+        healthLabel.TextColor3 = Color3.fromRGB(
+            math.floor((1 - ratio) * 255),
+            math.floor(ratio * 255),
+            50
+        )
+    end)
+    table.insert(data.connections, renderConn)
+end
+
+local function addPlayer(player)
+    if player == LocalPlayer then return end
+    if trackedPlayers[player] then return end
+
+    trackedPlayers[player] = { connections = {}, highlight = nil, billboard = nil }
+
+    if player.Character then
+        task.spawn(applyESP, player, player.Character)
     end
 
-    -- Hook future characters
     local charConn = player.CharacterAdded:Connect(function(char)
-        task.spawn(setupCharacterESP, player, char)
+        task.spawn(applyESP, player, char)
     end)
-    table.insert(connections, charConn)
-
-    local leaveConn = player.AncestryChanged:Connect(function()
-        if not player.Parent then
-            cleanupESP(player)
-        end
-    end)
-    table.insert(connections, leaveConn)
+    table.insert(trackedPlayers[player].connections, charConn)
 end
 
-local function removePlayer(player)
-    cleanupESP(player)
-end
-
--- Init for already-in-game players
 for _, player in ipairs(Players:GetPlayers()) do
     task.spawn(addPlayer, player)
 end
 
--- New players joining mid-game
 Players.PlayerAdded:Connect(addPlayer)
-Players.PlayerRemoving:Connect(removePlayer)
+Players.PlayerRemoving:Connect(removeESP)
 
 -- ============================================================
 -- HARD AIMBOT
