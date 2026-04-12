@@ -189,13 +189,10 @@ local function getClosestPlayer()
 local closestPlayer = nil
     local closestDist = Config.Aimbot_FOV
     local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player == LocalPlayer then continue end
-        if not isEnemy(player) then continue end
         
     for _, player in ipairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
+        if not isEnemy(player) then continue end
         if Config.Aimbot_TeamCheck
             and LocalPlayer.Team ~= nil
             and player.Team == LocalPlayer.Team then
