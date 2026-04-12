@@ -46,17 +46,15 @@ local function removeESP(player)
     local data = trackedPlayers[player]
     if not data then return end
     
-    -- Clean up UI and Highlights
+    -- Disconnect all loops for this player
+    for _, conn in ipairs(data.connections) do
+        conn:Disconnect()
+    end
+    data.connections = {} -- Clear the list
+
     if data.highlight then data.highlight:Destroy() end
     if data.billboard then data.billboard:Destroy() end
     
-    for _, conn in ipairs(data.connections) do
-        if conn._isRender then 
-            conn:Disconnect() 
-        end
-    end
-    
-    -- Reset references
     data.highlight = nil
     data.billboard = nil
 end
@@ -65,26 +63,18 @@ local function applyESP(player, char)
     local data = trackedPlayers[player]
     if not data then return end
 
+    -- Clean up previous round's visuals
     if data.highlight then data.highlight:Destroy() end
     if data.billboard then data.billboard:Destroy() end
-
-    -- Remove old render connections
-    for i = #data.connections, 1, -1 do
-        if data.connections[i]._isRender then
-            data.connections[i]:Disconnect()
-            table.remove(data.connections, i)
-        end
-    end
 
     local root = char:WaitForChild("HumanoidRootPart", 10)
     local humanoid = char:WaitForChild("Humanoid", 10)
     if not root or not humanoid then return end
 
+    -- Create Visuals
     local highlight = Instance.new("Highlight")
     highlight.FillColor = Config.ESP_BoxColor
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-    highlight.FillTransparency = 0.5
-    highlight.OutlineTransparency = 0
     highlight.Adornee = char
     highlight.Parent = char
     data.highlight = highlight
@@ -98,26 +88,16 @@ local function applyESP(player, char)
 
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
-    nameLabel.Position = UDim2.new(0, 0, 0, 0)
     nameLabel.BackgroundTransparency = 1
     nameLabel.Text = player.Name
     nameLabel.TextColor3 = Config.ESP_NameColor
-    nameLabel.TextStrokeTransparency = 0
     nameLabel.TextScaled = true
     nameLabel.Font = Enum.Font.GothamBold
     nameLabel.Parent = billboard
 
-    local healthLabel = Instance.new("TextLabel")
-    healthLabel.Size = UDim2.new(1, 0, 0.5, 0)
-    healthLabel.Position = UDim2.new(0, 0, 0.5, 0)
-    healthLabel.BackgroundTransparency = 1
-    healthLabel.TextStrokeTransparency = 0
-    healthLabel.TextScaled = true
-    healthLabel.Font = Enum.Font.Gotham
-    healthLabel.Parent = billboard
-
+    -- THE FIX: Save the connection normally
     local renderConn = RunService.RenderStepped:Connect(function()
-        if not char.Parent then
+        if not char.Parent or not humanoid or humanoid.Health <= 0 then
             highlight.Enabled = false
             billboard.Enabled = false
             return
@@ -128,49 +108,35 @@ local function applyESP(player, char)
         if not myRoot then return end
 
         local dist = (root.Position - myRoot.Position).Magnitude
-        local alive = humanoid.Health > 0
-        local visible = Config.ESP_Enabled and dist <= Config.ESP_MaxDistance and alive
+        local visible = Config.ESP_Enabled and dist <= Config.ESP_MaxDistance
 
         highlight.Enabled = visible
         billboard.Enabled = visible
-
-        if visible then
-            local hp = math.floor(humanoid.Health)
-            local maxHp = math.max(math.floor(humanoid.MaxHealth), 1)
-            healthLabel.Text = hp .. " / " .. maxHp
-            local ratio = hp / maxHp
-            healthLabel.TextColor3 = Color3.fromRGB(
-                math.floor((1 - ratio) * 255),
-                math.floor(ratio * 255),
-                50
-            )
-        end
     end)
-    renderConn._isRender = true
+    
     table.insert(data.connections, renderConn)
 end
 
 local function addPlayer(player)
     if player == LocalPlayer then return end
-    if trackedPlayers[player] then return end
-
+    
     trackedPlayers[player] = { connections = {}, highlight = nil, billboard = nil }
 
-    if player.Character then
-        task.spawn(applyESP, player, player.Character)
+    local function setup()
+        if player.Character then
+            task.spawn(applyESP, player, player.Character)
+        end
     end
 
-    local charConn = player.CharacterAdded:Connect(function(char)
-        removeESP(player) 
-        trackedPlayers[player] = { connections = {}, highlight = nil, billboard = nil }
-        table.insert(trackedPlayers[player].connections, charConn) 
-        
-        task.wait(0.5) 
-        if char.Parent then
-            task.spawn(applyESP, player, char)
-        end
+    -- Initial setup
+    setup()
+
+    -- New Round Listener
+    player.CharacterAdded:Connect(function(char)
+        task.wait(0.5) -- Wait for game to position the character
+        removeESP(player) -- Wipe old round data
+        setup() -- Apply new round data
     end)
-    table.insert(trackedPlayers[player].connections, charConn)
 end
 
 for _, player in ipairs(Players:GetPlayers()) do
