@@ -19,8 +19,8 @@ local Config = {
 
     Aimbot_Enabled = true,
     Aimbot_Key = Enum.KeyCode.X,
-    Aimbot_Smoothness = 0.55,
-    Aimbot_FOV = 100,
+    Aimbot_Smoothness = 0.1,
+    Aimbot_FOV = 500,
     Aimbot_TargetPart = "Head",
     Aimbot_TeamCheck = true,
     Tracer_Enabled = false,
