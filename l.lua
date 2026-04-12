@@ -59,6 +59,12 @@ local function removeESP(player)
     data.billboard = nil
 end
 
+local function isEnemy(player)
+    if not player.Team or not LocalPlayer.Team then return true end
+    
+    return player.Team ~= LocalPlayer.Team
+end
+
 local function applyESP(player, char)
     local data = trackedPlayers[player]
     if not data then return end
@@ -107,11 +113,15 @@ local function applyESP(player, char)
         local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
         if not myRoot then return end
 
-        local dist = (root.Position - myRoot.Position).Magnitude
-        local visible = Config.ESP_Enabled and dist <= Config.ESP_MaxDistance
+    local isTargetEnemy = isEnemy(player)
+    local dist = (root.Position - myRoot.Position).Magnitude
+    
+    local visible = Config.ESP_Enabled 
+        and dist <= Config.ESP_MaxDistance 
+        and isTargetEnemy 
 
-        highlight.Enabled = visible
-        billboard.Enabled = visible
+    highlight.Enabled = visible
+    billboard.Enabled = visible
     end)
     
     table.insert(data.connections, renderConn)
@@ -176,10 +186,14 @@ Players.PlayerRemoving:Connect(cleanupTracer)
 -- AIMBOT
 -- ============================================================
 local function getClosestPlayer()
-    local closestPlayer = nil
+local closestPlayer = nil
     local closestDist = Config.Aimbot_FOV
     local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        if not isEnemy(player) then continue end
+        
     for _, player in ipairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
         if Config.Aimbot_TeamCheck
