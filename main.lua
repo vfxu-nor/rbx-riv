@@ -23,6 +23,14 @@ local Config = {
     Aimbot_FOV = 500,
     Aimbot_TargetPart = "Head",
     Aimbot_TeamCheck = true,
+    Tracer_Enabled = false,
+    Tracer_Color = Color3.fromRGB(255, 80, 80),
+    Tracer_Thickness = 1.5,
+
+    Prediction_Enabled = false,
+    Prediction_Strength = 0.1,
+
+    AutoFire_Enabled = false,
 }
 
 -- ============================================================
@@ -158,6 +166,32 @@ Players.PlayerAdded:Connect(addPlayer)
 Players.PlayerRemoving:Connect(removeESP)
 
 -- ============================================================
+-- TRACER LINES
+-- ============================================================
+local tracerLines = {}
+
+local function getOrCreateTracer(player)
+    if not tracerLines[player] then
+        local line = Drawing.new("Line")
+        line.Thickness = Config.Tracer_Thickness
+        line.Color = Config.Tracer_Color
+        line.Transparency = 0.7
+        line.Visible = false
+        tracerLines[player] = line
+    end
+    return tracerLines[player]
+end
+
+local function cleanupTracer(player)
+    if tracerLines[player] then
+        tracerLines[player]:Remove()
+        tracerLines[player] = nil
+    end
+end
+
+Players.PlayerRemoving:Connect(cleanupTracer)
+
+-- ============================================================
 -- AIMBOT
 -- ============================================================
 local function getClosestPlayer()
@@ -202,12 +236,44 @@ fovCircle.Transparency = 0.7
 fovCircle.Visible = false
 fovCircle.Radius = Config.Aimbot_FOV
 
+local mouse1Down = false
+
 RunService.RenderStepped:Connect(function()
     fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     fovCircle.Visible = Config.Aimbot_Enabled
 
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        local line = getOrCreateTracer(player)
+        local char = player.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local humanoid = char and char:FindFirstChild("Humanoid")
+
+        if not Config.Tracer_Enabled or not root or not humanoid or humanoid.Health <= 0 then
+            line.Visible = false
+            continue
+        end
+
+        local screenPos, onScreen = Camera:WorldToScreenPoint(root.Position)
+        if not onScreen then
+            line.Visible = false
+            continue
+        end
+
+        line.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+        line.To = Vector2.new(screenPos.X, screenPos.Y)
+        line.Visible = true
+    end
+
     if not Config.Aimbot_Enabled then return end
-    if not UserInputService:IsKeyDown(Config.Aimbot_Key) then return end
+    if not UserInputService:IsKeyDown(Config.Aimbot_Key) then
+        if mouse1Down then
+            mouse1Down = false
+            UserInputService:GetMouseButtonsPressed()
+            game:GetService("VirtualInputManager"):SendMouseButtonEvent(0, 0, 0, false, game, 0)
+        end
+        return
+    end
 
     local target = getClosestPlayer()
     if not target then return end
@@ -219,11 +285,26 @@ RunService.RenderStepped:Connect(function()
         or char:FindFirstChild("HumanoidRootPart")
     if not targetPart then return end
 
-    local _, onScreen = Camera:WorldToScreenPoint(targetPart.Position)
+    -- Prediction: offset aim by velocity
+    local targetPosition = targetPart.Position
+    if Config.Prediction_Enabled then
+        local rootPart = char:FindFirstChild("HumanoidRootPart")
+        if rootPart then
+            local velocity = rootPart.AssemblyLinearVelocity
+            targetPosition = targetPosition + (velocity * Config.Prediction_Strength)
+        end
+    end
+
+    local _, onScreen = Camera:WorldToScreenPoint(targetPosition)
     if not onScreen then return end
 
-    local targetCF = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+    local targetCF = CFrame.new(Camera.CFrame.Position, targetPosition)
     Camera.CFrame = Camera.CFrame:Lerp(targetCF, Config.Aimbot_Smoothness)
+
+    if Config.AutoFire_Enabled and not mouse1Down then
+        mouse1Down = true
+        game:GetService("VirtualInputManager"):SendMouseButtonEvent(0, 0, 0, true, game, 0)
+    end
 end)
 
 -- ============================================================
@@ -238,6 +319,24 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     if input.KeyCode == Enum.KeyCode.F2 then
         Config.Aimbot_Enabled = not Config.Aimbot_Enabled
         print("[Aimbot] " .. (Config.Aimbot_Enabled and "ON" or "OFF"))
+    end
+        if input.KeyCode == Enum.KeyCode.F3 then
+        Config.Tracer_Enabled = not Config.Tracer_Enabled
+        print("[Tracers] " .. (Config.Tracer_Enabled and "ON" or "OFF"))
+    end
+
+    if input.KeyCode == Enum.KeyCode.F4 then
+        Config.Prediction_Enabled = not Config.Prediction_Enabled
+        print("[Prediction] " .. (Config.Prediction_Enabled and "ON" or "OFF"))
+    end
+
+    if input.KeyCode == Enum.KeyCode.F5 then
+        Config.AutoFire_Enabled = not Config.AutoFire_Enabled
+        if not Config.AutoFire_Enabled and mouse1Down then
+            mouse1Down = false
+            game:GetService("VirtualInputManager"):SendMouseButtonEvent(0, 0, 0, false, game, 0)
+        end
+        print("[AutoFire] " .. (Config.AutoFire_Enabled and "ON" or "OFF"))
     end
 end)
 
