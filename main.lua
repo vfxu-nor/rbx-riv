@@ -156,6 +156,27 @@ local function addPlayer(player)
         task.spawn(applyESP, player, char)
     end)
     table.insert(trackedPlayers[player].connections, charConn)
+
+    local refreshConn = RunService.Heartbeat:Connect(function()
+        if not trackedPlayers[player] then return end
+        local char = player.Character
+        if char and char.Parent then
+            task.spawn(applyESP, player, char)
+        end
+    end)
+
+    refreshConn:Disconnect() 
+
+    task.spawn(function()
+        while trackedPlayers[player] do
+            task.wait(10)
+            if not trackedPlayers[player] then break end
+            local char = player.Character
+            if char and char.Parent then
+                task.spawn(applyESP, player, char)
+            end
+        end
+    end)
 end
 
 for _, player in ipairs(Players:GetPlayers()) do
